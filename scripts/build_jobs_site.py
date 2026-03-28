@@ -201,13 +201,14 @@ def render_job_page(job: dict) -> str:
             f'<p><strong>Apply:</strong> <a href="{html_escape(job["apply_url"])}">{html_escape(job["apply_url"])}</a></p>'
         )
 
-    paragraphs = []
+    description_paragraphs = []
     for para in re.split(r"\n{2,}", job["description"]):
         para = re.sub(r"\s+", " ", para).strip()
         if para:
-            paragraphs.append(f"<p>{html_escape(para)}</p>")
-    if not paragraphs:
-        paragraphs = ["<p>No description was available in the feed for this job.</p>"]
+            description_paragraphs.append(f"<p>{html_escape(para)}</p>")
+
+    if not description_paragraphs:
+        description_paragraphs = ["<p>No description was available in the feed for this job.</p>"]
 
     return f"""<!doctype html>
 <html lang="en">
@@ -225,7 +226,7 @@ def render_job_page(job: dict) -> str:
       {''.join(meta_bits)}
       <section>
         <h2>Description</h2>
-        {''.join(paragraphs)}
+        {''.join(description_paragraphs)}
       </section>
     </article>
   </main>
@@ -251,7 +252,14 @@ def render_index(jobs: list[dict], fetched_at: str) -> str:
             else ""
         )
 
-        preview = job["description"][:500] + ("…" if len(job["description"]) > 500 else "")
+        description_paragraphs = []
+        for para in re.split(r"\n{2,}", job["description"]):
+            para = re.sub(r"\s+", " ", para).strip()
+            if para:
+                description_paragraphs.append(f"<p>{html_escape(para)}</p>")
+
+        if not description_paragraphs:
+            description_paragraphs = ["<p>No description was available in the feed for this job.</p>"]
 
         items.append(f"""
         <article>
@@ -260,7 +268,7 @@ def render_index(jobs: list[dict], fetched_at: str) -> str:
           {department_html}
           {employment_type_html}
           {apply_html}
-          <p>{html_escape(preview)}</p>
+          {''.join(description_paragraphs)}
         </article>
         """)
 
