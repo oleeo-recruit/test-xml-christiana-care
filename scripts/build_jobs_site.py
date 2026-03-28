@@ -4,6 +4,7 @@ import html
 import json
 import os
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urljoin
@@ -186,6 +187,12 @@ def write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def reset_dir(path: Path) -> None:
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
+
+
 def render_job_page(job: dict) -> str:
     meta_bits = []
     if job["location"]:
@@ -311,8 +318,8 @@ def render_sitemap(jobs: list[dict]) -> str:
 
 
 def main() -> int:
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+    reset_dir(OUT_DIR)
+    reset_dir(DEBUG_DIR)
 
     xml_text = fetch_xml(FEED_URL)
     write_text(DEBUG_DIR / "feed-sample.xml", xml_text[:20000])
