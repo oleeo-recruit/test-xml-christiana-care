@@ -4,7 +4,6 @@ import html
 import json
 import os
 import re
-from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urljoin
@@ -237,15 +236,31 @@ def render_job_page(job: dict) -> str:
 
 def render_index(jobs: list[dict], fetched_at: str) -> str:
     items = []
+
     for job in jobs:
+        location_html = f"<p><strong>Location:</strong> {html_escape(job['location'])}</p>" if job["location"] else ""
+        department_html = f"<p><strong>Department:</strong> {html_escape(job['department'])}</p>" if job["department"] else ""
+        employment_type_html = (
+            f"<p><strong>Employment type:</strong> {html_escape(job['employment_type'])}</p>"
+            if job["employment_type"]
+            else ""
+        )
+        apply_html = (
+            f'<p><strong>Apply:</strong> <a href="{html_escape(job["apply_url"])}">{html_escape(job["apply_url"])}</a></p>'
+            if job["apply_url"]
+            else ""
+        )
+
+        preview = job["description"][:500] + ("…" if len(job["description"]) > 500 else "")
+
         items.append(f"""
         <article>
           <h2><a href="jobs/{html_escape(job['slug'])}.html">{html_escape(job['title'])}</a></h2>
-          {"<p><strong>Location:</strong> " + html_escape(job["location"]) + "</p>" if job["location"] else ""}
-          {"<p><strong>Department:</strong> " + html_escape(job["department"]) + "</p>" if job["department"] else ""}
-          {"<p><strong>Employment type:</strong> " + html_escape(job["employment_type"]) + "</p>" if job["employment_type"] else ""}
-          {"<p><strong>Apply:</strong> <a href=\\"" + html_escape(job["apply_url"]) + "\\">" + html_escape(job["apply_url"]) + "</a></p>" if job["apply_url"] else ""}
-          <p>{html_escape(job["description"][:500] + ("…" if len(job["description"]) > 500 else ""))}</p>
+          {location_html}
+          {department_html}
+          {employment_type_html}
+          {apply_html}
+          <p>{html_escape(preview)}</p>
         </article>
         """)
 
