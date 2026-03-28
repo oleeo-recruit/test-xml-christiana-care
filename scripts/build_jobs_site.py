@@ -153,7 +153,13 @@ def normalize_apply_url(record: ET.Element) -> str:
     raw = find_first_text(record, FIELD_ALIASES["apply_url"])
     if not raw:
         return ""
-    return urljoin(FEED_URL, raw)
+
+    url = urljoin(FEED_URL, raw).strip()
+
+    # Convert Workday apply links to the job detail page
+    url = re.sub(r"/apply/?$", "/", url)
+
+    return url
 
 
 def record_to_job(record: ET.Element, index: int) -> dict:
