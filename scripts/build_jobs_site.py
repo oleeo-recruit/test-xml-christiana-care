@@ -19,6 +19,7 @@ OUT_DIR = Path(os.getenv("OUT_DIR", "site"))
 DEBUG_DIR = Path(os.getenv("DEBUG_DIR", "build-debug"))
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "60"))
 MAX_JOBS = int(os.getenv("MAX_JOBS", "0"))  # 0 = no limit
+JOBS_PER_PAGE = int(os.getenv("JOBS_PER_PAGE", "18"))
 
 FIELD_ALIASES = {
     "id": ["id", "jobid", "job_id", "reqid", "requisitionid", "referencenumber", "reference", "identifier"],
@@ -199,6 +200,44 @@ def reset_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
+def chunk_jobs(jobs: list[dict], page_size: int) -> list[list[dict]]:
+    if page_size <= 0:
+        raise ValueError("JOBS_PER_PAGE must be greater than 0")
+    return [jobs[i:i + page_size] for i in range(0, len(jobs), page_size)] or [[]]
+
+
+def page_filename(page_number: int) -> str:
+    return "index.html" if page_number == 1 else f"page-{page_number}.html"
+
+
+def page_url(page_number: int) -> str:
+    return f"{BASE_URL}/" if page_number == 1 else f"{BASE_URL}/{page_filename(page_number)}"
+
+
+def render_pagination_nav(current_page: int, total_pages: int) -> str:
+    if total_pages <= 1:
+        return ""
+
+    parts = ['<nav aria-label="Pagination"><p><strong>Pages:</strong> ']
+
+    if current_page > 1:
+        prev_page = current_page - 1
+        parts.append(f'<a href="{html_escape(page_filename(prev_page))}">Previous</a> ')
+
+    for page_num in range(1, total_pages + 1):
+        if page_num == current_page:
+            parts.append(f"<strong>{page_num}</strong> ")
+        else:
+            parts.append(f'<a href="{html_escape(page_filename(page_num))}">{page_num}</a> ')
+
+    if current_page < total_pages:
+        next_page = current_page + 1
+        parts.append(f'<a href="{html_escape(page_filename(next_page))}">Next</a>')
+
+    parts.append("</p></nav>")
+    return "".join(parts)
+
+
 def render_job_page(job: dict) -> str:
     meta_bits = []
     if job["location"]:
@@ -248,7 +287,13 @@ def render_job_page(job: dict) -> str:
 """
 
 
-def render_index(jobs: list[dict], fetched_at: str) -> str:
+def render_index_page(
+    jobs: list[dict],
+    fetched_at: str,
+    current_page: int,
+    total_pages: int,
+    total_jobs: int,
+) -> str:
     items = []
 
     for job in jobs:
@@ -283,7 +328,10 @@ def render_index(jobs: list[dict], fetched_at: str) -> str:
           {apply_html}
           {''.join(description_paragraphs)}
         </article>
+        <hr>
         """)
+
+    nav_html = render_pagination_nav(current_page, total_pages)
 
     return f"""<!doctype html>
 <html lang="en">
@@ -291,34 +339,41 @@ def render_index(jobs: list[dict], fetched_at: str) -> str:
   <meta charset="utf-8">
   <meta name="robots" content="index,follow">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{html_escape(SITE_TITLE)}</title>
+  <title>{html_escape(SITE_TITLE)} | Page {current_page}</title>
 </head>
 <body>
   <main>
     <h1>{html_escape(SITE_TITLE)}</h1>
     <p>This page is generated automatically from the ChristianaCare XML feed.</p>
     <p><strong>Last refreshed:</strong> {html_escape(fetched_at)}</p>
-    <p><strong>Total jobs:</strong> {len(jobs)}</p>
+    <p><strong>Total jobs:</strong> {total_jobs}</p>
+    <p><strong>Page:</strong> {current_page} of {total_pages}</p>
+    {nav_html}
     {''.join(items)}
+    {nav_html}
   </main>
 </body>
 </html>
 """
 
 
-def render_sitemap(jobs: list[dict]) -> str:
-    urls = [f"{BASE_URL}/", f"{BASE_URL}/index.html", f"{BASE_URL}/sitemap.xml"]
+def render_sitemap(jobs: list[dict], total_pages: int) -> str:
+    urls = [f"{BASE_URL}/", f"{BASE_URL}/sitemap.xml", f"{BASE_URL}/voiceflow-urls.txt"]
+    urls.extend(page_url(page_num) for page_num in range(2, total_pages + 1))
     urls.extend(f"{BASE_URL}/jobs/{job['slug']}.html" for job in jobs)
+
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
     ]
     today = datetime.now(timezone.utc).date().isoformat()
+
     for url in urls:
         lines.append("  <url>")
         lines.append(f"    <loc>{html_escape(url)}</loc>")
         lines.append(f"    <lastmod>{today}</lastmod>")
         lines.append("  </url>")
+
     lines.append("</urlset>")
     return "\n".join(lines)
 
@@ -351,10 +406,28 @@ def main() -> int:
         deduped.append(job)
     jobs = deduped
 
+    paged_jobs = chunk_jobs(jobs, JOBS_PER_PAGE)
+    total_pages = len(paged_jobs)
     fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
-    write_text(OUT_DIR / "index.html", render_index(jobs, fetched_at))
-    write_text(OUT_DIR / "sitemap.xml", render_sitemap(jobs))
+    for page_num, page_jobs in enumerate(paged_jobs, start=1):
+        write_text(
+            OUT_DIR / page_filename(page_num),
+            render_index_page(
+                jobs=page_jobs,
+                fetched_at=fetched_at,
+                current_page=page_num,
+                total_pages=total_pages,
+                total_jobs=len(jobs),
+            ),
+        )
+
+    write_text(
+        OUT_DIR / "voiceflow-urls.txt",
+        "\n".join(page_url(page_num) for page_num in range(1, total_pages + 1)) + "\n",
+    )
+
+    write_text(OUT_DIR / "sitemap.xml", render_sitemap(jobs, total_pages))
     write_text(OUT_DIR / "robots.txt", "User-agent: *\nAllow: /\n")
 
     for job in jobs:
@@ -365,6 +438,8 @@ def main() -> int:
         "base_url": BASE_URL,
         "record_tag_detected": record_tag,
         "jobs_built": len(jobs),
+        "jobs_per_page": JOBS_PER_PAGE,
+        "pages_built": total_pages,
         "first_job": jobs[0] if jobs else None,
         "generated_at": fetched_at,
     }
