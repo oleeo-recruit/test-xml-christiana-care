@@ -33,6 +33,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install Python dependencies
+        run: pip install lxml  
+
       - name: Build site from XML feed
         env:
           FEED_URL: https://careers-cms.christianacare.org/google/feed.php
