@@ -11,6 +11,8 @@ from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
 
+from lxml import etree as LET
+
 
 FEED_URL = os.getenv("FEED_URL", "https://careers-cms.christianacare.org/google/feed.php")
 BASE_URL = os.getenv("BASE_URL", "https://oleeo-recruit.github.io/test-xml-christiana-care").rstrip("/")
@@ -44,7 +46,7 @@ def localname(tag: str) -> str:
     return tag.strip().lower()
 
 
-def text_from_element(el: ET.Element | None) -> str:
+def text_from_element(el) -> str:
     if el is None:
         return ""
     raw = "".join(el.itertext())
@@ -75,9 +77,24 @@ def fetch_xml(url: str) -> str:
     return data.decode(charset, errors="replace")
 
 
-def detect_records(root: ET.Element) -> tuple[list[ET.Element], str]:
+def parse_feed(xml_text: str):
+    # First try strict parser
+    try:
+        return ET.fromstring(xml_text)
+    except ET.ParseError:
+        pass
+
+    # Fallback: recover malformed XML/HTML-ish content
+    parser = LET.XMLParser(recover=True)
+    root = LET.fromstring(xml_text.encode("utf-8", errors="ignore"), parser=parser)
+    if root is None:
+        raise RuntimeError("Could not parse XML feed, even with recovery parser.")
+    return root
+
+
+def detect_records(root) -> tuple[list, str]:
     all_elements = list(root.iter())
-    by_tag: dict[str, list[ET.Element]] = {}
+    by_tag: dict[str, list] = {}
     for el in all_elements:
         tag = localname(el.tag)
         by_tag.setdefault(tag, []).append(el)
@@ -91,7 +108,7 @@ def detect_records(root: ET.Element) -> tuple[list[ET.Element], str]:
 
     best_tag = None
     best_score = (-1, -1)
-    best_records: list[ET.Element] = []
+    best_records: list = []
     for tag, els in by_tag.items():
         if len(els) < 2:
             continue
@@ -117,7 +134,7 @@ def detect_records(root: ET.Element) -> tuple[list[ET.Element], str]:
     raise RuntimeError("Could not detect repeating job records in the XML feed.")
 
 
-def find_first_text(record: ET.Element, aliases: list[str]) -> str:
+def find_first_text(record, aliases: list[str]) -> str:
     alias_set = {a.lower() for a in aliases}
 
     for child in list(record):
@@ -137,7 +154,7 @@ def find_first_text(record: ET.Element, aliases: list[str]) -> str:
     return ""
 
 
-def normalize_location(record: ET.Element) -> str:
+def normalize_location(record) -> str:
     location = find_first_text(record, FIELD_ALIASES["location"])
     if location:
         return location
@@ -150,20 +167,17 @@ def normalize_location(record: ET.Element) -> str:
     return ", ".join(dict.fromkeys(parts))
 
 
-def normalize_apply_url(record: ET.Element) -> str:
+def normalize_apply_url(record) -> str:
     raw = find_first_text(record, FIELD_ALIASES["apply_url"])
     if not raw:
         return ""
 
     url = urljoin(FEED_URL, raw).strip()
-
-    # Convert Workday apply links to the job detail page
     url = re.sub(r"/apply/?$", "/", url)
-
     return url
 
 
-def record_to_job(record: ET.Element, index: int) -> dict:
+def record_to_job(record, index: int) -> dict:
     title = find_first_text(record, FIELD_ALIASES["title"]) or f"Job {index}"
     job_id = find_first_text(record, FIELD_ALIASES["id"])
     description = find_first_text(record, FIELD_ALIASES["description"])
@@ -385,7 +399,7 @@ def main() -> int:
     xml_text = fetch_xml(FEED_URL)
     write_text(DEBUG_DIR / "feed-sample.xml", xml_text[:20000])
 
-    root = ET.fromstring(xml_text.encode("utf-8", errors="ignore"))
+    root = parse_feed(xml_text)
     records, record_tag = detect_records(root)
     if MAX_JOBS > 0:
         records = records[:MAX_JOBS]
