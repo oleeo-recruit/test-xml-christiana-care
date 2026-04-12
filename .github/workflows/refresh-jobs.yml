@@ -43,21 +43,25 @@ jobs:
         run: python scripts/build_jobs_site.py
 
       - name: Smoke test generated files
+
         run: |
           test -f site/index.html
           test -f site/sitemap.xml
           test -f site/robots.txt
+          test -f site/voiceflow-urls.txt
+          test -f site/page-2.html
           test -d site/jobs
           python - <<'PY'
           from pathlib import Path
           import json
-
+      
           index_text = Path("site/index.html").read_text(encoding="utf-8")
           assert "<html" in index_text.lower()
           assert "Last refreshed:" in index_text
-
+      
           summary = json.loads(Path("build-debug/summary.json").read_text(encoding="utf-8"))
           assert summary["jobs_built"] >= 1, "No jobs were built"
+          assert summary["pages_built"] >= 2, "Pagination was not generated"
           print("Smoke tests passed")
           print(json.dumps(summary, indent=2))
           PY
