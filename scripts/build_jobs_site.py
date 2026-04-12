@@ -21,7 +21,7 @@ OUT_DIR = Path(os.getenv("OUT_DIR", "site"))
 DEBUG_DIR = Path(os.getenv("DEBUG_DIR", "build-debug"))
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "60"))
 MAX_JOBS = int(os.getenv("MAX_JOBS", "0"))  # 0 = no limit
-JOBS_PER_PAGE = int(os.getenv("JOBS_PER_PAGE", "18"))
+JOBS_PER_PAGE = int(os.getenv("JOBS_PER_PAGE", "10"))
 
 FIELD_ALIASES = {
     "id": ["id", "jobid", "job_id", "reqid", "requisitionid", "referencenumber", "reference", "identifier"],
