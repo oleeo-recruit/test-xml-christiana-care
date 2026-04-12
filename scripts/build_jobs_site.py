@@ -372,7 +372,7 @@ def render_index_page(
 
 
 def render_sitemap(jobs: list[dict], total_pages: int) -> str:
-    urls = [f"{BASE_URL}/", f"{BASE_URL}/sitemap.xml", f"{BASE_URL}/voiceflow-urls.txt"]
+    urls = [f"{BASE_URL}/", f"{BASE_URL}/all-jobs.html", f"{BASE_URL}/sitemap.xml", f"{BASE_URL}/voiceflow-urls.txt"]
     urls.extend(page_url(page_num) for page_num in range(2, total_pages + 1))
     urls.extend(f"{BASE_URL}/jobs/{job['slug']}.html" for job in jobs)
 
@@ -435,6 +435,17 @@ def main() -> int:
                 total_jobs=len(jobs),
             ),
         )
+
+    write_text(
+    OUT_DIR / "all-jobs.html",
+    render_index_page(
+        jobs=jobs,
+        fetched_at=fetched_at,
+        current_page=1,
+        total_pages=1,
+        total_jobs=len(jobs),
+    ),
+)
 
     write_text(
         OUT_DIR / "voiceflow-urls.txt",
