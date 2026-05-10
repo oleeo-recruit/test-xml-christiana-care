@@ -380,7 +380,6 @@ def render_sitemap(jobs: list[dict], total_pages: int) -> str:
         f"{BASE_URL}/voiceflow-sitemap.xml",
         f"{BASE_URL}/voiceflow-urls.txt",
     ]
-    urls.extend(page_url(page_num) for page_num in range(2, total_pages + 1))
     urls.extend(f"{BASE_URL}/jobs/{job['slug']}.html" for job in jobs)
 
     lines = [
