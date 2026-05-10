@@ -223,10 +223,6 @@ def page_filename(page_number: int) -> str:
     return "index.html" if page_number == 1 else f"page-{page_number}.html"
 
 
-def page_url(page_number: int) -> str:
-    return f"{BASE_URL}/" if page_number == 1 else f"{BASE_URL}/{page_filename(page_number)}"
-
-
 def render_pagination_nav(current_page: int, total_pages: int) -> str:
     if total_pages <= 1:
         return ""
@@ -373,14 +369,7 @@ def render_index_page(
 
 
 def render_sitemap(jobs: list[dict], total_pages: int) -> str:
-    urls = [
-        f"{BASE_URL}/",
-        f"{BASE_URL}/all-jobs.html",
-        f"{BASE_URL}/sitemap.xml",
-        f"{BASE_URL}/voiceflow-sitemap.xml",
-        f"{BASE_URL}/voiceflow-urls.txt",
-    ]
-    urls.extend(f"{BASE_URL}/jobs/{job['slug']}.html" for job in jobs)
+    urls = [f"{BASE_URL}/jobs/{job['slug']}.html" for job in jobs]
 
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
