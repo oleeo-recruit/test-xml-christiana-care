@@ -21,7 +21,7 @@ OUT_DIR = Path(os.getenv("OUT_DIR", "site"))
 DEBUG_DIR = Path(os.getenv("DEBUG_DIR", "build-debug"))
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "60"))
 MAX_JOBS = int(os.getenv("MAX_JOBS", "0"))  # 0 = no limit
-JOBS_PER_PAGE = int(os.getenv("JOBS_PER_PAGE", "10"))
+JOBS_PER_PAGE = int(os.getenv("JOBS_PER_PAGE", "18"))
 
 FIELD_ALIASES = {
     "id": ["id", "jobid", "job_id", "reqid", "requisitionid", "referencenumber", "reference", "identifier"],
@@ -78,13 +78,11 @@ def fetch_xml(url: str) -> str:
 
 
 def parse_feed(xml_text: str):
-    # First try strict parser
     try:
         return ET.fromstring(xml_text)
     except ET.ParseError:
         pass
 
-    # Fallback: recover malformed XML/HTML-ish content
     parser = LET.XMLParser(recover=True)
     root = LET.fromstring(xml_text.encode("utf-8", errors="ignore"), parser=parser)
     if root is None:
@@ -185,6 +183,7 @@ def record_to_job(record, index: int) -> dict:
         description = text_from_element(record)
         if description.startswith(title):
             description = description[len(title):].strip(" -:\n\t")
+
     job = {
         "id": job_id or f"row-{index}",
         "title": title,
@@ -307,6 +306,7 @@ def render_index_page(
     current_page: int,
     total_pages: int,
     total_jobs: int,
+    heading: str | None = None,
 ) -> str:
     items = []
 
@@ -346,6 +346,7 @@ def render_index_page(
         """)
 
     nav_html = render_pagination_nav(current_page, total_pages)
+    page_heading = heading or SITE_TITLE
 
     return f"""<!doctype html>
 <html lang="en">
@@ -353,11 +354,11 @@ def render_index_page(
   <meta charset="utf-8">
   <meta name="robots" content="index,follow">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{html_escape(SITE_TITLE)} | Page {current_page}</title>
+  <title>{html_escape(page_heading)} | Page {current_page}</title>
 </head>
 <body>
   <main>
-    <h1>{html_escape(SITE_TITLE)}</h1>
+    <h1>{html_escape(page_heading)}</h1>
     <p>This page is generated automatically from the ChristianaCare XML feed.</p>
     <p><strong>Last refreshed:</strong> {html_escape(fetched_at)}</p>
     <p><strong>Total jobs:</strong> {total_jobs}</p>
@@ -372,9 +373,34 @@ def render_index_page(
 
 
 def render_sitemap(jobs: list[dict], total_pages: int) -> str:
-    urls = [f"{BASE_URL}/", f"{BASE_URL}/all-jobs.html", f"{BASE_URL}/sitemap.xml", f"{BASE_URL}/voiceflow-urls.txt"]
+    urls = [
+        f"{BASE_URL}/",
+        f"{BASE_URL}/all-jobs.html",
+        f"{BASE_URL}/sitemap.xml",
+        f"{BASE_URL}/voiceflow-sitemap.xml",
+        f"{BASE_URL}/voiceflow-urls.txt",
+    ]
     urls.extend(page_url(page_num) for page_num in range(2, total_pages + 1))
     urls.extend(f"{BASE_URL}/jobs/{job['slug']}.html" for job in jobs)
+
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+    ]
+    today = datetime.now(timezone.utc).date().isoformat()
+
+    for url in urls:
+        lines.append("  <url>")
+        lines.append(f"    <loc>{html_escape(url)}</loc>")
+        lines.append(f"    <lastmod>{today}</lastmod>")
+        lines.append("  </url>")
+
+    lines.append("</urlset>")
+    return "\n".join(lines)
+
+
+def render_voiceflow_sitemap(jobs: list[dict]) -> str:
+    urls = [f"{BASE_URL}/jobs/{job['slug']}.html" for job in jobs]
 
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -437,22 +463,24 @@ def main() -> int:
         )
 
     write_text(
-    OUT_DIR / "all-jobs.html",
-    render_index_page(
-        jobs=jobs,
-        fetched_at=fetched_at,
-        current_page=1,
-        total_pages=1,
-        total_jobs=len(jobs),
-    ),
-)
+        OUT_DIR / "all-jobs.html",
+        render_index_page(
+            jobs=jobs,
+            fetched_at=fetched_at,
+            current_page=1,
+            total_pages=1,
+            total_jobs=len(jobs),
+            heading=f"{SITE_TITLE} | All Jobs",
+        ),
+    )
 
     write_text(
         OUT_DIR / "voiceflow-urls.txt",
-        "\n".join(page_url(page_num) for page_num in range(1, total_pages + 1)) + "\n",
+        "\n".join(f"{BASE_URL}/jobs/{job['slug']}.html" for job in jobs) + "\n",
     )
 
     write_text(OUT_DIR / "sitemap.xml", render_sitemap(jobs, total_pages))
+    write_text(OUT_DIR / "voiceflow-sitemap.xml", render_voiceflow_sitemap(jobs))
     write_text(OUT_DIR / "robots.txt", "User-agent: *\nAllow: /\n")
 
     for job in jobs:
